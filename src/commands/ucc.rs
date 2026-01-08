@@ -65,39 +65,34 @@ fn detect_type(input: &str) -> InputType {
     }
 
     // 6. URL Encoded
-    if trimmed.contains('%') {
-        if let Ok(decoded) = urlencoding::decode(trimmed) {
-            if decoded != trimmed {
-                return InputType::Url;
-            }
-        }
+    if trimmed.contains('%')
+        && let Ok(decoded) = urlencoding::decode(trimmed)
+        && decoded != trimmed
+    {
+        return InputType::Url;
     }
 
     // 7. Hex (Hex 解码后必须是有效文本，否则视为 Text)
-    if trimmed.len() > 2 && trimmed.len() % 2 == 0 && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+    if trimmed.len() > 2
+        && trimmed.len().is_multiple_of(2)
+        && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+        && let Ok(bytes) = hex::decode(trimmed)
+        && std::str::from_utf8(&bytes).is_ok()
     {
-        if let Ok(bytes) = hex::decode(trimmed) {
-            if std::str::from_utf8(&bytes).is_ok() {
-                return InputType::Hex;
-            }
-        }
+        return InputType::Hex;
     }
 
     // 8. Base64
-    if trimmed.len() > 4 && trimmed.len() % 4 == 0 {
-        let is_b64 = trimmed.chars().all(|c| {
+    if trimmed.len() > 4
+        && trimmed.len().is_multiple_of(4)
+        && trimmed.chars().all(|c| {
             c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' || c == '-' || c == '_'
-        }); // URL safe base64
-        if is_b64 {
-            if let Ok(bytes) = decode_base64_forgiving(trimmed) {
-                if std::str::from_utf8(&bytes).is_ok() {
-                    // 过滤掉短的普通单词误判
-                    if trimmed.contains('=') || trimmed.len() > 8 {
-                        return InputType::Base64;
-                    }
-                }
-            }
-        }
+        })
+        && let Ok(bytes) = decode_base64_forgiving(trimmed)
+        && std::str::from_utf8(&bytes).is_ok()
+        && (trimmed.contains('=') || trimmed.len() > 8)
+    {
+        return InputType::Base64;
     }
 
     InputType::Text
@@ -125,14 +120,14 @@ fn convert(input: &str, input_type: &InputType) -> (String, String) {
             // Decode payload (part 2)
             // 需要处理 URL Safe Base64 并且可能没有 padding
             let payload = parts[1];
-            if let Ok(bytes) = decode_base64_forgiving(payload) {
-                if let Ok(json) = String::from_utf8(bytes) {
-                    // 格式化一下 JSON
-                    let pretty = serde_json::from_str::<serde_json::Value>(&json)
-                        .map(|v| serde_json::to_string_pretty(&v).unwrap())
-                        .unwrap_or(json);
-                    return (pretty, "JWT Payload".into());
-                }
+            if let Ok(bytes) = decode_base64_forgiving(payload)
+                && let Ok(json) = String::from_utf8(bytes)
+            {
+                // 格式化一下 JSON
+                let pretty = serde_json::from_str::<serde_json::Value>(&json)
+                    .map(|v| serde_json::to_string_pretty(&v).unwrap())
+                    .unwrap_or(json);
+                return (pretty, "JWT Payload".into());
             }
             ("Invalid JWT Payload".into(), "Error".into())
         }
@@ -145,15 +140,13 @@ fn convert(input: &str, input_type: &InputType) -> (String, String) {
             let cleaned = input
                 .replace("U+", " ")
                 .replace("u+", " ")
-                .replace('U', " ")
-                .replace('u', " ")
-                .replace('+', " ");
+                .replace(['U', 'u', '+'], " ");
 
             for part in cleaned.split_whitespace() {
-                if let Ok(code) = u32::from_str_radix(part, 16) {
-                    if let Some(c) = std::char::from_u32(code) {
-                        res.push(c);
-                    }
+                if let Ok(code) = u32::from_str_radix(part, 16)
+                    && let Some(c) = std::char::from_u32(code)
+                {
+                    res.push(c);
                 }
             }
             (res, "Unicode码点 → 字符".into())
@@ -262,10 +255,7 @@ pub fn run(args: UccArgs) {
         // 解码模式
         let (res, info) = convert(&input_str, &input_type);
         if args.json {
-            println!(
-                "{}",
-                serde_json::json!({"result": res, "info": info}).to_string()
-            );
+            println!("{}", serde_json::json!({"result": res, "info": info}));
         } else if args.quiet {
             print!("{}", res);
         } else {

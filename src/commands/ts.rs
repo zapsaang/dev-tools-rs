@@ -52,13 +52,13 @@ fn parse_datetime(input: &str) -> Option<DateTime<Utc>> {
         }
 
         // 特殊处理只有日期的情况，补全时间
-        if fmt == "%Y-%m-%d" {
-            if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(input, fmt) {
-                return Local
-                    .from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
-                    .single()
-                    .map(|d| d.with_timezone(&Utc));
-            }
+        if fmt == "%Y-%m-%d"
+            && let Ok(naive_date) = chrono::NaiveDate::parse_from_str(input, fmt)
+        {
+            return Local
+                .from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .map(|d| d.with_timezone(&Utc));
         }
     }
 
