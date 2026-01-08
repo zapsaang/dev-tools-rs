@@ -1,8 +1,8 @@
-use clap::Args;
-use crate::utils::{read_input, is_alfred_env, print_alfred, AlfredItem};
-use std::borrow::Cow;
-use base64::engine::general_purpose;
+use crate::utils::{AlfredItem, is_alfred_env, print_alfred, read_input};
 use base64::Engine as _;
+use base64::engine::general_purpose;
+use clap::Args;
+use std::borrow::Cow;
 
 #[derive(Args)]
 pub struct UccArgs {
@@ -14,7 +14,7 @@ pub struct UccArgs {
 
     #[arg(long)]
     alfred: bool,
-    
+
     #[arg(short, long)]
     json: bool,
 
@@ -24,9 +24,9 @@ pub struct UccArgs {
 
 #[derive(Debug, PartialEq)]
 enum InputType {
-    Jwt,            // 新增: eyJhbG...
-    HtmlEntity,     // 新增: &lt;
-    UnicodePoints, 
+    Jwt,        // 新增: eyJhbG...
+    HtmlEntity, // 新增: &lt;
+    UnicodePoints,
     UnicodeEscaped,
     Hex,
     Url,
@@ -36,7 +36,7 @@ enum InputType {
 
 fn detect_type(input: &str) -> InputType {
     let trimmed = input.trim();
-    
+
     // 1. JWT (header.payload.signature)
     if trimmed.split('.').count() == 3 && trimmed.len() > 20 {
         // 简单验证 payload 部分是否为 base64
@@ -53,40 +53,51 @@ fn detect_type(input: &str) -> InputType {
 
     // 4. Unicode Points
     if trimmed.to_uppercase().starts_with("U+") {
-         let plain = trimmed.replace("U+", "").replace("u+", "").replace(" ", "");
-         if plain.chars().all(|c| c.is_ascii_hexdigit()) {
-             return InputType::UnicodePoints;
-         }
+        let plain = trimmed.replace("U+", "").replace("u+", "").replace(" ", "");
+        if plain.chars().all(|c| c.is_ascii_hexdigit()) {
+            return InputType::UnicodePoints;
+        }
     }
 
     // 5. Unicode Escaped
-    if trimmed.contains("\\u") { return InputType::UnicodeEscaped; }
+    if trimmed.contains("\\u") {
+        return InputType::UnicodeEscaped;
+    }
 
     // 6. URL Encoded
     if trimmed.contains('%') {
         if let Ok(decoded) = urlencoding::decode(trimmed) {
-            if decoded != trimmed { return InputType::Url; }
+            if decoded != trimmed {
+                return InputType::Url;
+            }
         }
     }
 
     // 7. Hex (Hex 解码后必须是有效文本，否则视为 Text)
-    if trimmed.len() > 2 && trimmed.len() % 2 == 0 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
-         if let Ok(bytes) = hex::decode(trimmed) {
-             if std::str::from_utf8(&bytes).is_ok() { return InputType::Hex; }
-         }
+    if trimmed.len() > 2 && trimmed.len() % 2 == 0 && trimmed.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        if let Ok(bytes) = hex::decode(trimmed) {
+            if std::str::from_utf8(&bytes).is_ok() {
+                return InputType::Hex;
+            }
+        }
     }
 
     // 8. Base64
     if trimmed.len() > 4 && trimmed.len() % 4 == 0 {
-         let is_b64 = trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' || c == '-' || c == '_'); // URL safe base64
-         if is_b64 {
-             if let Ok(bytes) = decode_base64_forgiving(trimmed) {
-                 if std::str::from_utf8(&bytes).is_ok() { 
-                     // 过滤掉短的普通单词误判
-                     if trimmed.contains('=') || trimmed.len() > 8 { return InputType::Base64; }
-                 }
-             }
-         }
+        let is_b64 = trimmed.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' || c == '-' || c == '_'
+        }); // URL safe base64
+        if is_b64 {
+            if let Ok(bytes) = decode_base64_forgiving(trimmed) {
+                if std::str::from_utf8(&bytes).is_ok() {
+                    // 过滤掉短的普通单词误判
+                    if trimmed.contains('=') || trimmed.len() > 8 {
+                        return InputType::Base64;
+                    }
+                }
+            }
+        }
     }
 
     InputType::Text
@@ -116,18 +127,19 @@ fn convert(input: &str, input_type: &InputType) -> (String, String) {
             let payload = parts[1];
             if let Ok(bytes) = decode_base64_forgiving(payload) {
                 if let Ok(json) = String::from_utf8(bytes) {
-                     // 格式化一下 JSON
-                     let pretty = serde_json::from_str::<serde_json::Value>(&json)
+                    // 格式化一下 JSON
+                    let pretty = serde_json::from_str::<serde_json::Value>(&json)
                         .map(|v| serde_json::to_string_pretty(&v).unwrap())
                         .unwrap_or(json);
-                     return (pretty, "JWT Payload".into());
+                    return (pretty, "JWT Payload".into());
                 }
             }
             ("Invalid JWT Payload".into(), "Error".into())
-        },
-        InputType::HtmlEntity => {
-            (html_escape::decode_html_entities(input).to_string(), "HTML实体 → 字符".into())
-        },
+        }
+        InputType::HtmlEntity => (
+            html_escape::decode_html_entities(input).to_string(),
+            "HTML实体 → 字符".into(),
+        ),
         InputType::UnicodePoints => {
             let mut res = String::new();
             let cleaned = input
@@ -145,33 +157,58 @@ fn convert(input: &str, input_type: &InputType) -> (String, String) {
                 }
             }
             (res, "Unicode码点 → 字符".into())
-        },
+        }
         InputType::UnicodeEscaped => {
             let json_str = format!("\"{}\"", input);
-            let res = serde_json::from_str::<String>(&json_str).unwrap_or_else(|_| input.to_string());
+            let res =
+                serde_json::from_str::<String>(&json_str).unwrap_or_else(|_| input.to_string());
             (res, "Unicode转义序列 → 字符串".into())
-        },
+        }
         InputType::Hex => {
             if let Ok(bytes) = hex::decode(input.trim()) {
-                 (String::from_utf8_lossy(&bytes).to_string(), "UTF-8十六进制 → 字符串".into())
-            } else { ("Error".into(), "Error".into()) }
-        },
-        InputType::Url => (urlencoding::decode(input).unwrap_or(Cow::Borrowed(input)).to_string(), "URL编码 → 字符串".into()),
+                (
+                    String::from_utf8_lossy(&bytes).to_string(),
+                    "UTF-8十六进制 → 字符串".into(),
+                )
+            } else {
+                ("Error".into(), "Error".into())
+            }
+        }
+        InputType::Url => (
+            urlencoding::decode(input)
+                .unwrap_or(Cow::Borrowed(input))
+                .to_string(),
+            "URL编码 → 字符串".into(),
+        ),
         InputType::Base64 => {
-             if let Ok(bytes) = decode_base64_forgiving(input) {
-                 (String::from_utf8_lossy(&bytes).to_string(), "Base64编码 → 字符串".into())
-             } else { ("Error".into(), "Error".into()) }
-        },
-        InputType::Text => (input.to_string(), "文本".into())
+            if let Ok(bytes) = decode_base64_forgiving(input) {
+                (
+                    String::from_utf8_lossy(&bytes).to_string(),
+                    "Base64编码 → 字符串".into(),
+                )
+            } else {
+                ("Error".into(), "Error".into())
+            }
+        }
+        InputType::Text => (input.to_string(), "文本".into()),
     }
 }
 
 fn generate_all_encodings(input: &str) -> Vec<AlfredItem> {
     let mut items = Vec::new();
-    
+
     // Text -> Encodings
-    let unicode_pts: String = input.chars().map(|c| format!("U+{:04X}", c as u32)).collect::<Vec<_>>().join(" ");
-    items.push(AlfredItem::new("unicode", &unicode_pts, "Unicode码点", &unicode_pts));
+    let unicode_pts: String = input
+        .chars()
+        .map(|c| format!("U+{:04X}", c as u32))
+        .collect::<Vec<_>>()
+        .join(" ");
+    items.push(AlfredItem::new(
+        "unicode",
+        &unicode_pts,
+        "Unicode码点",
+        &unicode_pts,
+    ));
 
     let hex_str = hex::encode(input).to_uppercase();
     items.push(AlfredItem::new("hex", &hex_str, "UTF-8十六进制", &hex_str));
@@ -190,10 +227,13 @@ fn generate_all_encodings(input: &str) -> Vec<AlfredItem> {
 
 pub fn run(args: UccArgs) {
     let input_str = read_input(args.input);
-    if input_str.is_empty() { return; }
+    if input_str.is_empty() {
+        return;
+    }
 
     let input_type = detect_type(&input_str);
-    let is_alfred = is_alfred_env(args.alfred) && !args.json && !args.quiet && args.format.is_none();
+    let is_alfred =
+        is_alfred_env(args.alfred) && !args.json && !args.quiet && args.format.is_none();
 
     if is_alfred {
         let items = if input_type == InputType::Text {
@@ -211,7 +251,7 @@ pub fn run(args: UccArgs) {
         // 展示所有编码
         let items = generate_all_encodings(&input_str);
         if args.json {
-             print_alfred(items); // 复用 Alfred JSON 结构作为 JSON 输出
+            print_alfred(items); // 复用 Alfred JSON 结构作为 JSON 输出
         } else {
             println!("Input: {}", input_str);
             for item in items {

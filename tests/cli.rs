@@ -33,7 +33,7 @@ fn ucc_text_lists_encodings() {
     cmd.args(["ucc", "hello"]) // pure text => list encodings
         .assert()
         .success()
-    .stdout(predicate::str::contains("\"subtitle\":\"Base64编码\""));
+        .stdout(predicate::str::contains("\"subtitle\":\"Base64编码\""));
 }
 
 #[test]
@@ -51,6 +51,8 @@ fn ts_parses_seconds_timestamp() {
     cmd.args(["ts", "1700000000"])
         .assert()
         .success()
-    .stdout(predicate::str::contains("\"subtitle\":\"Timestamp (Seconds)\""))
-    .stdout(predicate::str::contains("\"arg\":\"1700000000\""));
+        .stdout(predicate::str::contains(
+            "\"subtitle\":\"Timestamp (Seconds)\"",
+        ))
+        .stdout(predicate::str::contains("\"arg\":\"1700000000\""));
 }

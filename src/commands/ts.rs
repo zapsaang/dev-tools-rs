@@ -1,6 +1,6 @@
+use crate::utils::{AlfredItem, is_alfred_env, print_alfred, read_input};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use clap::Args;
-use crate::utils::{read_input, is_alfred_env, print_alfred, AlfredItem};
-use chrono::{DateTime, Utc, Local, TimeZone, NaiveDateTime};
 
 #[derive(Args)]
 pub struct TsArgs {
@@ -39,26 +39,26 @@ fn parse_datetime(input: &str) -> Option<DateTime<Utc>> {
     }
 
     // 4. 尝试常见格式 "YYYY-MM-DD HH:mm:ss" (默认为本地时间)
-    let common_formats = vec![
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y-%m-%d",
-    ];
+    let common_formats = vec!["%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"];
 
     for fmt in common_formats {
         // 尝试解析为 Naive (无时区)，然后加上本地时区
         if let Ok(naive) = NaiveDateTime::parse_from_str(input, fmt) {
             // 这里假设输入的是本地时间
-            return Local.from_local_datetime(&naive).single().map(|d| d.with_timezone(&Utc));
+            return Local
+                .from_local_datetime(&naive)
+                .single()
+                .map(|d| d.with_timezone(&Utc));
         }
-        
+
         // 特殊处理只有日期的情况，补全时间
         if fmt == "%Y-%m-%d" {
-             if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(input, fmt) {
-                 return Local.from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
+            if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(input, fmt) {
+                return Local
+                    .from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
                     .single()
                     .map(|d| d.with_timezone(&Utc));
-             }
+            }
         }
     }
 
@@ -66,7 +66,10 @@ fn parse_datetime(input: &str) -> Option<DateTime<Utc>> {
     if let Ok(t) = chrono::NaiveTime::parse_from_str(input, "%H:%M:%S") {
         let today = Local::now().date_naive();
         let naive = today.and_time(t);
-        return Local.from_local_datetime(&naive).single().map(|d| d.with_timezone(&Utc));
+        return Local
+            .from_local_datetime(&naive)
+            .single()
+            .map(|d| d.with_timezone(&Utc));
     }
 
     None
@@ -76,7 +79,7 @@ fn parse_datetime(input: &str) -> Option<DateTime<Utc>> {
 fn relative_time(dt: &DateTime<Utc>) -> String {
     let now = Utc::now();
     let diff = now.signed_duration_since(*dt);
-    
+
     let seconds = diff.num_seconds();
     let abs_seconds = seconds.abs();
 
@@ -101,7 +104,11 @@ fn relative_time(dt: &DateTime<Utc>) -> String {
 
 pub fn run(args: TsArgs) {
     let raw_input = read_input(args.input);
-    let input_str = if raw_input.is_empty() { "now" } else { &raw_input };
+    let input_str = if raw_input.is_empty() {
+        "now"
+    } else {
+        &raw_input
+    };
 
     match parse_datetime(input_str) {
         Some(utc_dt) => {
@@ -115,7 +122,12 @@ pub fn run(args: TsArgs) {
 
             // 1. 本地格式 (最常用)
             let local_str = local_dt.format("%Y-%m-%d %H:%M:%S").to_string();
-            items.push(AlfredItem::new("local", &local_str, "Local Time", &local_str));
+            items.push(AlfredItem::new(
+                "local",
+                &local_str,
+                "Local Time",
+                &local_str,
+            ));
 
             // 2. 时间戳 (秒)
             items.push(AlfredItem::new(
@@ -138,7 +150,12 @@ pub fn run(args: TsArgs) {
             items.push(AlfredItem::new("utc", &utc_str, "UTC (ISO 8601)", &utc_str));
 
             // 5. 相对时间
-            items.push(AlfredItem::new("rel", &rel_time, "Relative Time", &rel_time));
+            items.push(AlfredItem::new(
+                "rel",
+                &rel_time,
+                "Relative Time",
+                &rel_time,
+            ));
 
             // 输出
             if is_alfred_env(args.alfred) {
@@ -151,7 +168,7 @@ pub fn run(args: TsArgs) {
                     println!("{:<20} {}", item.subtitle.to_string() + ":", item.arg);
                 }
             }
-        },
+        }
         None => {
             let err_msg = format!("Invalid date format: {}", input_str);
             if is_alfred_env(args.alfred) {

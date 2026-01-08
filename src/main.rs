@@ -1,8 +1,8 @@
-mod utils;
 mod commands;
+mod utils;
 
 use clap::{Parser, Subcommand};
-use commands::{scc, ucc, ts};
+use commands::{scc, ts, ucc};
 
 #[derive(Parser)]
 #[command(name = "dt")]
@@ -17,7 +17,7 @@ struct Cli {
 enum Commands {
     /// String Case Converter (字符串风格转换)
     Scc(scc::SccArgs),
-    
+
     /// Universal Code Converter (编码/JWT/HTML 智能转换)
     Ucc(ucc::UccArgs),
 
